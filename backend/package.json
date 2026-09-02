@@ -6,7 +6,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && echo '{\"type\":\"module\"}' > dist/package.json",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
