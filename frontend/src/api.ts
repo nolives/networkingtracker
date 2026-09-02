@@ -14,38 +14,59 @@ function looksLikeJwt(value: unknown): value is string {
 }
 
 /**
- * Neon's documentation is inconsistent about where the Data API JWT lives:
- * the auth reference says `session.access_token`, while their backend guide
- * reads `session.token`. Rather than betting on one, this probes the session
- * for a value that is actually shaped like a JWT.
+ * Returns the JWT the Data API accepts.
  *
- * The token is fetched fresh on every request and never cached in React state,
- * so the SDK can rotate an expiring token. Caching it at mount produces an app
- * that works for a few minutes and then fails with 401s.
+ * Getting this right took some digging, because the session token and the API
+ * token are not the same thing. Managed Better Auth issues an opaque 32-char
+ * session token (it starts `rGc8…`, not `eyJ…`), while the Data API wants a
+ * signed JWT from `GET {AUTH_URL}/token`. Neon's own backend guide reads
+ * `session.token` and forwards it, which would send the opaque one.
+ *
+ * So: ask the SDK first, but verify what comes back is really a JWT, and fall
+ * back to the token endpoint if it is not.
+ *
+ * Fetched fresh on every request and never cached in React state, so the SDK
+ * can rotate an expiring token. Caching it at mount yields an app that works
+ * for a few minutes and then fails with 401s.
  */
 async function getAccessToken(): Promise<string> {
-  const { data } = await neon.auth.getSession();
+  const auth = neon.auth as unknown as {
+    getJWTToken?: () => Promise<string | null>;
+  };
 
-  if (!data) throw new ApiError('You are signed out.', 401);
+  if (typeof auth.getJWTToken === 'function') {
+    const token = await auth.getJWTToken().catch(() => null);
+    if (looksLikeJwt(token)) return token;
+  }
 
-  const session = (data as { session?: Record<string, unknown> }).session ?? {};
-  const candidates = [
-    session.access_token,
-    session.accessToken,
-    session.token,
-    (data as Record<string, unknown>).access_token,
-  ];
+  // Fall back to the token endpoint. credentials: 'include' sends the auth
+  // service's session cookie, which is set on Neon's domain, not ours.
+  const response = await fetch(
+    `${import.meta.env.VITE_NEON_AUTH_URL.replace(/\/+$/, '')}/token`,
+    { credentials: 'include' }
+  );
 
-  const token = candidates.find(looksLikeJwt);
+  if (!response.ok) throw new ApiError('You are signed out.', 401);
+
+  const body = await response.json().catch(() => null);
+  const token = findJwt(body);
 
   if (!token) {
-    throw new ApiError(
-      'Could not read an access token from the session.',
-      401
-    );
+    throw new ApiError('Could not read an access token from the session.', 401);
   }
 
   return token;
+}
+
+/** Walks a small object graph looking for a JWT-shaped string. */
+function findJwt(value: unknown, depth = 0): string | null {
+  if (looksLikeJwt(value)) return value;
+  if (depth > 3 || value === null || typeof value !== 'object') return null;
+  for (const nested of Object.values(value)) {
+    const found = findJwt(nested, depth + 1);
+    if (found) return found;
+  }
+  return null;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

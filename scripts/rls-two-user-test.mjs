@@ -99,14 +99,20 @@ function findJwt(value, depth = 0) {
 }
 
 /**
- * Signs in against Managed Better Auth and returns the JWT the Data API
- * accepts. Better Auth keeps an opaque session cookie; the JWT is issued
- * separately, so if sign-in does not hand one back we ask /token for it.
+ * Signs in and returns the JWT the Data API accepts.
+ *
+ * Two things that are easy to get wrong here:
+ *  - Managed Better Auth rejects requests without an Origin header
+ *    (MISSING_ORIGIN), even server-to-server.
+ *  - The sign-in response's `token` is an opaque 32-char session token, NOT a
+ *    JWT. The Data API needs the signed JWT from GET /token.
  */
+const ORIGIN = env.TEST_ORIGIN ?? 'http://localhost:5173';
+
 async function signIn({ email, password }) {
   const response = await fetch(`${AUTH_URL}/sign-in/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
     body: JSON.stringify({ email, password }),
   });
 
@@ -121,19 +127,22 @@ async function signIn({ email, password }) {
     .map((c) => c.split(';')[0])
     .join('; ');
 
-  let token = findJwt(body);
+  const tokenResponse = await fetch(`${AUTH_URL}/token`, {
+    headers: {
+      Origin: ORIGIN,
+      ...(cookie ? { cookie } : {}),
+      ...(body.token ? { Authorization: `Bearer ${body.token}` } : {}),
+    },
+  });
 
-  if (!token) {
-    const tokenResponse = await fetch(`${AUTH_URL}/token`, {
-      headers: {
-        ...(cookie ? { cookie } : {}),
-        ...(body.token ? { Authorization: `Bearer ${body.token}` } : {}),
-      },
-    });
-    if (tokenResponse.ok) token = findJwt(await tokenResponse.json());
+  if (!tokenResponse.ok) {
+    throw new Error(
+      `Could not get a JWT for ${email} (${tokenResponse.status}).`
+    );
   }
 
-  if (!token) throw new Error(`Could not obtain a JWT for ${email}.`);
+  const token = findJwt(await tokenResponse.json());
+  if (!token) throw new Error(`No JWT in the token response for ${email}.`);
 
   const claims = JSON.parse(
     Buffer.from(token.split('.')[1], 'base64url').toString('utf8')

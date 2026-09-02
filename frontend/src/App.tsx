@@ -22,6 +22,21 @@ import * as api from '@/api';
 import { neon } from '@/neon';
 import { PRIORITIES, type Contact, type ContactDraft } from '@/types';
 
+/**
+ * Mobile sort options. The desktop table sorts via its clickable column
+ * headers, but those headers are hidden below `md`, so without this control
+ * sorting would be unreachable on a phone. Each option encodes both the key
+ * and the direction, which keeps the mobile control a single tap.
+ */
+const SORT_OPTIONS: { value: string; label: string; sort: Sort }[] = [
+  { value: 'created_at:desc', label: 'Newest first', sort: { key: 'created_at', direction: 'desc' } },
+  { value: 'created_at:asc', label: 'Oldest first', sort: { key: 'created_at', direction: 'asc' } },
+  { value: 'name:asc', label: 'Name A–Z', sort: { key: 'name', direction: 'asc' } },
+  { value: 'name:desc', label: 'Name Z–A', sort: { key: 'name', direction: 'desc' } },
+  { value: 'company:asc', label: 'Company A–Z', sort: { key: 'company', direction: 'asc' } },
+  { value: 'priority:asc', label: 'Priority (high first)', sort: { key: 'priority', direction: 'asc' } },
+];
+
 export default function App() {
   const { data: session, isPending } = neon.auth.useSession();
 
@@ -161,6 +176,23 @@ function ContactsScreen({ userEmail }: { userEmail: string }) {
           </div>
 
           <div className="flex gap-2">
+            {/* Mobile only: the desktop table sorts via its column headers. */}
+            <Select
+              value={`${sort.key}:${sort.direction}`}
+              onChange={(e) => {
+                const option = SORT_OPTIONS.find((o) => o.value === e.target.value);
+                if (option) setSort(option.sort);
+              }}
+              aria-label="Sort contacts"
+              className="flex-1 md:hidden"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+
             <Select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}

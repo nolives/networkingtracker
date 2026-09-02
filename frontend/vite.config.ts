@@ -5,6 +5,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // .env.local lives at the repository root so one file serves the frontend,
+  // the backend, and the migration script. Without this, Vite would only look
+  // inside frontend/ and every VITE_* variable would silently be undefined --
+  // which makes the auth SDK fall back to a relative /api/auth path.
+  envDir: fileURLToPath(new URL('..', import.meta.url)),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

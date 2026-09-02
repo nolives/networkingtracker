@@ -10,12 +10,24 @@ import { BetterAuthReactAdapter } from '@neondatabase/neon-js/auth/react/adapter
  * list -- and it is the URL that scripts/rls-two-user-test.mjs attacks directly
  * to demonstrate that RLS, not our backend, is what stops cross-user access.
  */
+const authUrl = import.meta.env.VITE_NEON_AUTH_URL;
+const dataApiUrl = import.meta.env.VITE_NEON_DATA_API_URL;
+
+// Fail loudly. If these are undefined the auth SDK quietly falls back to a
+// relative /api/auth path and every request 404s against our own origin --
+// which looks like a broken backend rather than missing configuration.
+if (!authUrl) {
+  throw new Error(
+    'VITE_NEON_AUTH_URL is not set. Copy .env.example to .env.local at the repository root.'
+  );
+}
+
 export const neon = createClient({
   auth: {
-    url: import.meta.env.VITE_NEON_AUTH_URL,
+    url: authUrl,
     adapter: BetterAuthReactAdapter(),
   },
   dataApi: {
-    url: import.meta.env.VITE_NEON_DATA_API_URL,
+    url: dataApiUrl,
   },
 });
