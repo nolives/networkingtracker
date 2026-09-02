@@ -68,6 +68,7 @@ function ContactsScreen({ userEmail }: { userEmail: string }) {
   const [editing, setEditing] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState<Contact | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,6 +123,25 @@ function ContactsScreen({ userEmail }: { userEmail: string }) {
     setEditing(null);
   }
 
+  /**
+   * Signs out, then reloads.
+   *
+   * The reload is deliberate. The auth SDK's useSession hook does not reliably
+   * invalidate after signOut, which left the app rendering the signed-in view
+   * with a dead session. Reloading also drops the contacts already fetched
+   * into React state, so nothing from the previous user survives in memory.
+   */
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await neon.auth.signOut();
+      window.location.href = '/';
+    } catch {
+      setSigningOut(false);
+      setLoadError('Could not sign you out. Please try again.');
+    }
+  }
+
   async function handleDelete() {
     if (!deleting) return;
     setDeleteBusy(true);
@@ -152,10 +172,11 @@ function ContactsScreen({ userEmail }: { userEmail: string }) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => neon.auth.signOut()}
+            onClick={handleSignOut}
+            disabled={signingOut}
             className="shrink-0"
           >
-            <LogOut className="h-4 w-4" />
+            {signingOut ? <Spinner /> : <LogOut className="h-4 w-4" />}
             <span className="hidden sm:inline">Sign out</span>
           </Button>
         </div>
