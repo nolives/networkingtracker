@@ -1,11 +1,12 @@
 # Networking Tracker
 
-A private contact tracker for the people you want to stay connected with at Berkeley. Every
-contact belongs to exactly one account, and that ownership is enforced by PostgreSQL Row Level
-Security rather than by application code — so even a bug in the API, or a request that skips the
-API entirely, cannot expose one user's contacts to another.
+A private contact tracker for the people you want to stay connected with at Berkeley. Each contact
+belongs to exactly one account, and that ownership is enforced by PostgreSQL Row Level Security
+rather than by application code — so a bug in the API, or a request that bypasses the API entirely,
+still cannot expose one user's contacts to another.
 
-**Live app:** _pending deployment_
+**Live app: https://networkingtracker.vercel.app**
+**Repository: https://github.com/nolives/networkingtracker**
 
 ---
 
@@ -13,7 +14,7 @@ API entirely, cannot expose one user's contacts to another.
 
 - [Features](#features)
 - [Screenshots](#screenshots)
-- [Technology stack](#technology-stack-and-why)
+- [Technology stack and why](#technology-stack-and-why)
 - [Architecture](#architecture)
 - [Local setup](#local-setup)
 - [Environment variables](#environment-variables)
@@ -34,26 +35,65 @@ API entirely, cannot expose one user's contacts to another.
 - Sort by name, company, priority, or date added; filter by priority; search across every field
 - Contacts persist in Neon Postgres and survive a refresh
 - Distinct loading, empty, filtered-empty, success, and error states
-- Responsive: a table on desktop, cards on mobile, with 44px touch targets
-- Validation in two independent layers — the API rejects bad input, and the database's own
+- Responsive: a table on desktop, cards on mobile, with 44px touch targets and a mobile sort control
+- Light and dark themes, following the operating system
+- Validation in two independent layers — the API rejects bad input, and the database's own CHECK
   constraints reject it again
 
 ## Screenshots
 
-_Added after deployment._
+Captured from the live deployment by `scripts/` automation, not by hand.
+
+### Sign in
+![Sign in](docs/screenshots/01-sign-in.png)
+
+### Contact list, sortable and filterable
+![Contact list](docs/screenshots/02-contact-list.png)
+
+### Creating a contact
+![Add contact](docs/screenshots/03-add-contact.png)
+![Contact created](docs/screenshots/04-created.png)
+
+### Invalid input fails safely
+An empty name is rejected by the **backend**, and the per-field message is rendered inline. The
+browser's own validation is disabled (`noValidate`) so the request actually reaches the server and
+shows the server's real error rather than a native tooltip.
+
+![Invalid input](docs/screenshots/05-invalid-input.png)
+
+### Sorting and filtering
+Sorted by priority — note the order is by urgency (high → medium → low), not alphabetical.
+
+![Sorted by priority](docs/screenshots/06-sorted-priority.png)
+![Filtered to high](docs/screenshots/07-filtered-high.png)
+
+### Editing and deleting
+![Edit contact](docs/screenshots/08-edit-contact.png)
+![Delete confirmation](docs/screenshots/09-delete-confirm.png)
+
+### Data survives a refresh
+After a full page reload, the list is re-fetched from Neon Postgres.
+
+![After refresh](docs/screenshots/10-after-refresh.png)
+
+### Mobile
+The six-column table becomes cards, and a sort control appears because the sortable column headers
+are hidden at this width.
+
+![Mobile](docs/screenshots/11-mobile.png)
 
 ## Technology stack and why
 
 | Layer | Choice | Why |
 |---|---|---|
-| Frontend | React 19 + Vite + TypeScript | Fast builds, and the assignment required React |
+| Frontend | React 19 + Vite + TypeScript | Fast builds and instant HMR; React was a project requirement |
 | Styling | Tailwind CSS v4 + shadcn/ui patterns | Component source lives in this repo, so every line is ours to explain; responsive layout without a separate stylesheet |
-| Backend | Node + Express 5 + TypeScript | A genuinely separate service, as required — its own package, dependencies, and tests |
-| Validation | Zod | One schema defines the API contract and the unit tests |
+| Backend | Node + Express 5 + TypeScript | A genuinely separate service with its own package, dependencies, and tests |
+| Validation | Zod | One schema defines the API contract and is what the unit tests exercise |
 | Auth | Neon Managed Better Auth | Issues the JWT whose `sub` claim drives RLS |
 | Data access | Neon Data API (PostgREST) | Lets the backend query *as the signed-in user*, so RLS applies to every request |
-| Database | Neon Postgres | RLS is the security model the assignment specifies |
-| Hosting | Vercel | Static frontend and serverless API from one repository |
+| Database | Neon Postgres 18 | RLS is the security model this project is built around |
+| Hosting | Vercel Services | Builds the frontend and backend separately, serves both from one domain |
 
 ## Architecture
 
@@ -63,15 +103,15 @@ Browser — React + @neondatabase/neon-js
    │  1. sign up / sign in / sign out
    ├──────────────────────────────────────────►  Neon Managed Better Auth
    │                                                • opaque session cookie
-   │  2. session yields a JWT whose `sub` is the     • JWT for API access
+   │  2. GET /token → JWT whose `sub` is the         • JWT for API access
    │     user id
    │
    │  3. fetch /api/contacts
    │     Authorization: Bearer <JWT>
    ▼
-Express backend  (Vercel serverless function)
+Express backend  (Vercel service)
    │
-   │  4. verify the JWT's signature against Neon's JWKS  ──►  ${AUTH_URL}/.well-known/jwks.json
+   │  4. verify the JWT signature against Neon's JWKS  ──►  ${AUTH_URL}/.well-known/jwks.json
    │     invalid or expired  →  401
    │
    │  5. validate the body with Zod
@@ -87,51 +127,62 @@ Neon Postgres
      The database decides which rows exist for this request.
 ```
 
-### How the pieces stay separate
+### How the frontend and backend stay separate
 
-`frontend/` and `backend/` are separate npm workspaces with their own `package.json`,
-dependencies, and TypeScript configuration. They share no code and communicate only over
-HTTP + JSON with a Bearer token.
+`frontend/` and `backend/` are separate npm workspaces with their own `package.json`, dependencies,
+and TypeScript configuration. They share no code and communicate only over HTTP + JSON with a Bearer
+token.
 
-The frontend contains no SQL, no database driver, and no Data API calls for contact data. The
-backend contains no UI. `api/index.ts` is a small adapter that mounts the Express app as a Vercel
-function — the backend also runs standalone with `npm run dev:backend`, with no Vercel involved.
+The frontend contains no SQL, no database driver, and makes no Data API calls for contact data. The
+backend contains no UI and runs as an ordinary Express server (`npm run dev:backend`) with no Vercel
+involvement. In production, `vercel.json` declares them as two independently built
+[Vercel Services](https://vercel.com/docs/services) sharing one domain, with `/api/*` routed to the
+backend and everything else to the frontend.
 
-### Why the backend forwards the user's token
+### Why the backend forwards the user's token instead of using DATABASE_URL
 
-The obvious way to build a Node backend is to connect with `DATABASE_URL` and write
-`WHERE user_id = $1`. This project deliberately does not do that. Under that design the database
-would happily return any row, and the only thing standing between one user and another's data
-would be a `WHERE` clause — one forgotten filter from a breach, with the RLS policies reduced to
-decoration.
+The conventional way to build a Node backend is to connect with `DATABASE_URL` and write
+`WHERE user_id = $1`. This project deliberately does not. Under that design the database would
+happily return any row, and the only thing standing between one user and another's data would be a
+`WHERE` clause — one forgotten filter away from a breach, with the RLS policies reduced to decoration.
 
-Instead the backend holds **no database credentials at all**. It forwards the caller's own JWT to
-the Data API, so every query runs with that user's identity and Postgres itself filters the rows.
-`DATABASE_URL` is used only by the local migration script and is deliberately *not* configured in
+Instead the backend holds **no database credentials at all**. It forwards the caller's own JWT to the
+Data API, so every query runs with that user's identity and Postgres itself filters the rows.
+`DATABASE_URL` is used only by the local migration script and is deliberately **not** configured in
 Vercel.
 
-The practical consequence: an attacker who bypasses the backend entirely and calls the public Data
-API directly with a valid token still cannot read anyone else's contacts. That is what
-`npm run test:rls` demonstrates.
+The practical consequence: an attacker who skips the backend entirely and calls the public Data API
+directly with a valid token still cannot read anyone else's contacts. `npm run test:rls` demonstrates
+exactly that.
 
 ## Local setup
 
 Requires Node 20+.
 
 ```bash
-git clone <this-repo-url>
+git clone https://github.com/nolives/networkingtracker.git
 cd networkingtracker
 npm install
 ```
 
-Create the database objects (see [Environment variables](#environment-variables) first):
+Create a Neon project with Managed Better Auth and the Data API enabled:
 
 ```bash
-cp .env.example .env.local   # then fill in real values
-npm run db:migrate
+npx neon@latest auth
+npx neon@latest projects create --name networking-tracker
+npx neon@latest neon-auth enable --project-id <project-id>
+npx neon@latest data-api create --project-id <project-id> --branch <branch-id> \
+  --database neondb --auth-provider neon_auth --add-default-grants
 ```
 
-Run the app — the frontend proxies `/api` to the backend, mirroring production:
+Then configure and migrate:
+
+```bash
+cp .env.example .env.local    # fill in the real values
+npm run db:migrate            # applies db/schema.sql
+```
+
+Run both services — the frontend proxies `/api` to the backend, mirroring production:
 
 ```bash
 npm run dev
@@ -144,11 +195,11 @@ To run them separately: `npm run dev:frontend` and `npm run dev:backend`.
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local`. `.env.local` is gitignored and no real value is committed.
+Copy `.env.example` to `.env.local`. That file is gitignored and no real value is committed.
 
 The assignment lists the public variables with Next.js's `NEXT_PUBLIC_` prefix. This frontend is
-React + Vite, where only `VITE_`-prefixed variables reach the browser, so the names differ while
-the values and their public/server-only split are exactly as specified:
+React + Vite, where only `VITE_`-prefixed variables reach the browser, so the names differ while the
+values and their public/server-only split are exactly as specified:
 
 | Assignment name | Used here | Exposure |
 |---|---|---|
@@ -158,13 +209,16 @@ the values and their public/server-only split are exactly as specified:
 | — | `NEON_DATA_API_URL` | Server-only — backend → PostgREST |
 | `DATABASE_URL` | `DATABASE_URL` | **Secret. Local migrations only; never set in Vercel** |
 
+In Vercel the two public URLs are stored as `Config` variables and the two server URLs as `Secret`
+variables. `DATABASE_URL` is not present in the Vercel project at all.
+
 **On `VITE_NEON_DATA_API_URL`.** Because a Node backend sits between the browser and the database,
 the browser never queries the Data API — it needs only the Auth URL. The variable is declared for
 parity with the assignment's list, and `scripts/rls-two-user-test.mjs` points a real user's real
 token at that exact public URL to prove RLS holds even when the endpoint is known. The assignment
 says the frontend *may* use the public Data API URL; the binding requirement is that RLS protects
-every exposed row, which this design satisfies more strictly by exposing fewer rows to the client
-at all.
+every exposed row, which this design satisfies more strictly by exposing fewer rows to the client at
+all.
 
 ## Database schema
 
@@ -172,7 +226,7 @@ at all.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
-| `id` | `uuid` | PK, `default gen_random_uuid()` | |
+| `id` | `uuid` | primary key, `default gen_random_uuid()` | |
 | `user_id` | `text` | **`not null`, `default auth.user_id()`** | Owner. Filled from the JWT, never from client input |
 | `name` | `text` | `not null`, `check (length(btrim(name)) > 0)` | Rejects `''` and whitespace-only |
 | `company` | `text` | nullable | |
@@ -185,12 +239,36 @@ at all.
 
 Indexed on `(user_id, created_at desc)` to match the default listing.
 
+Verified output from `npm run db:migrate`:
+
+```
+RLS enabled on contacts: true
+Policies (4):
+  - contacts_delete_own    DELETE
+  - contacts_insert_own    INSERT
+  - contacts_select_own    SELECT
+  - contacts_update_own    UPDATE
+
+Columns:
+  - id           uuid                       NOT NULL default gen_random_uuid()
+  - user_id      text                       NOT NULL default auth.user_id()
+  - name         text                       NOT NULL
+  - company      text                       NULL
+  - role         text                       NULL
+  - where_met    text                       NULL
+  - notes        text                       NULL
+  - priority     text                       NOT NULL default 'medium'::text
+  - created_at   timestamp with time zone   NOT NULL default now()
+  - updated_at   timestamp with time zone   NOT NULL default now()
+```
+
 ## Authentication and RLS ownership
 
-**The request flow.** A user signs in against Managed Better Auth, which returns a JWT whose `sub`
-claim is their user id. The browser sends that JWT to the Express backend, which verifies its
-signature against Neon's JWKS endpoint (EdDSA/Ed25519) before doing anything else. The backend then
-forwards the same token to the Data API, so the query reaches Postgres carrying the user's identity.
+**The request flow.** A user signs in against Managed Better Auth. The session it returns holds an
+*opaque* 32-character session token; the JWT the Data API accepts comes from `GET {AUTH_URL}/token`.
+The browser sends that JWT to the Express backend, which verifies its signature against Neon's JWKS
+endpoint (EdDSA/Ed25519) before doing anything else, then forwards the same token to the Data API so
+the query reaches Postgres carrying the user's identity.
 
 **The ownership rule.** `auth.user_id()` returns the JWT's `sub` claim as text. Every policy on
 `contacts` compares it to the row's `user_id`:
@@ -216,14 +294,17 @@ create policy contacts_delete_own on contacts
 Four separate policies, one per operation, rather than a single `FOR ALL`.
 
 **Why `USING` and `WITH CHECK` are both present on update.** `USING` decides which existing rows an
-`UPDATE` is allowed to target — it stops a user editing someone else's row. `WITH CHECK` re-tests
-the row *after* modification, which is what stops a user rewriting `user_id` to hand their own row
-to another account. Without it, ownership could be transferred; with it, such an update matches
-zero rows.
+`UPDATE` may target — it stops a user editing someone else's row. `WITH CHECK` re-tests the row
+*after* modification, which is what stops a user rewriting `user_id` to hand their own row to another
+account. Without it, ownership could be transferred; with it, such an update matches zero rows. The
+privacy test exercises this case specifically.
 
-**Ownership cannot be supplied by the client.** `user_id` is absent from every Zod schema, so the
-backend strips it from any request body before the database is touched. Ownership comes only from
-the verified JWT via the column default. Two automated tests cover exactly this.
+**Ownership cannot be supplied by the client.** `user_id` appears in no Zod schema, so the backend
+strips it from any request body before the database is touched. Ownership comes only from the
+verified JWT via the column default. Three automated tests cover this.
+
+**Signed-out callers get nothing.** `authenticated` holds the table grants; `anonymous` is explicitly
+revoked.
 
 ## Testing
 
@@ -231,46 +312,201 @@ the verified JWT via the column default. Two automated tests cover exactly this.
 npm test
 ```
 
-Runs 19 Vitest cases against the validation layer. They need no network, database, or credentials,
-so they pass on a fresh clone. They cover:
+19 Vitest cases against the validation layer. They need no network, database, or credentials, so they
+pass on a fresh clone.
 
-- Empty, whitespace-only, missing, and over-long names are rejected
-- `priority` accepts only `high`, `medium`, `low` — `'urgent'` and `'HIGH'` are rejected
-- `priority` defaults to `medium`
-- A `user_id` or `id` smuggled into a create or update body is stripped, not honoured
-- Edits are partial but still validated, and an empty edit is rejected
-- Empty optional fields normalise to `null` rather than `''`
+```
+ RUN  v3.2.7 /Users/nickolives/code/networkingtracker/backend
+
+ ✓ src/validation.test.ts (19 tests) 3ms
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Duration  211ms
+```
+
+<details>
+<summary>All 19 cases</summary>
+
+```
+✓ createContactSchema — name is required > rejects an empty name
+✓ createContactSchema — name is required > rejects a whitespace-only name
+✓ createContactSchema — name is required > rejects a missing name
+✓ createContactSchema — name is required > rejects a name longer than 200 characters
+✓ createContactSchema — name is required > trims surrounding whitespace from a valid name
+✓ createContactSchema — priority is constrained > accepts high
+✓ createContactSchema — priority is constrained > accepts medium
+✓ createContactSchema — priority is constrained > accepts low
+✓ createContactSchema — priority is constrained > rejects a priority outside the allowed set
+✓ createContactSchema — priority is constrained > rejects a priority with the wrong casing
+✓ createContactSchema — priority is constrained > defaults to 'medium' when omitted
+✓ ownership cannot be supplied by the client > strips a user_id smuggled into a create payload
+✓ ownership cannot be supplied by the client > strips a user_id smuggled into an update payload
+✓ ownership cannot be supplied by the client > strips an id, so a row cannot be re-pointed
+✓ updateContactSchema — partial but still validated > accepts a single valid field
+✓ updateContactSchema — partial but still validated > still rejects an empty name on edit
+✓ updateContactSchema — partial but still validated > still rejects an invalid priority on edit
+✓ updateContactSchema — partial but still validated > rejects an empty payload
+✓ optional fields normalise to null > converts empty strings to null rather than storing ""
+```
+
+</details>
 
 ### Two-account privacy test
 
 ```bash
-npm run test:rls
+npm run test:rls                                        # against localhost
+TEST_API_URL=https://networkingtracker.vercel.app \
+TEST_ORIGIN=https://networkingtracker.vercel.app \
+  npm run test:rls                                      # against production
 ```
 
-Requires `.env.local` with two real test accounts. It signs in as both users, has User B create a
-contact, then has User A attempt to read, modify, reassign, and delete it — **both through the
-backend and directly against the public Data API** — before confirming with User B that the row is
-untouched. The direct-Data-API leg is the meaningful one: it proves RLS is doing the work, not the
-backend's filtering.
+Requires `.env.local` with two real test accounts. It signs in as both, has User B create a contact,
+then has User A attempt to read, modify, reassign, and delete it — **both through the backend and
+directly against the public Data API** — before confirming with User B that the row is untouched.
 
-Both write attempts use `Prefer: return=representation`, because PostgREST answers a write that
-matched zero rows with a bare `204` that would otherwise be indistinguishable from success.
+Both write attempts send `Prefer: return=representation`, because PostgREST answers a write that
+matched zero rows with a bare `204` that would otherwise be indistinguishable from success. Asserting
+on status alone would have reported a successful cross-user delete.
 
 ## Grading evidence
 
-_Added after deployment._
+### Automated test passing
+
+See [Testing](#testing) above — 19/19 passing, no credentials required.
+
+### Two accounts, run against the live deployment
+
+```
+Two-account RLS privacy test
+==========================================================
+
+User A: nrolives+usera@gmail.com  (sub 9f4e5297-fc51-436e-8eac-fb83817e674a)
+User B: nrolives+userb@gmail.com  (sub 74d6ac77-d0dc-4b86-addc-e27e12f6ad66)
+  PASS  the two accounts are distinct
+
+User B created contact 476dde3c-022e-4107-8eee-b00ecef71e80
+  PASS  the row is owned by User B via auth.user_id()
+
+1. User A attacks the public Data API directly (no backend):
+  PASS  SELECT returns none of User B's rows
+  PASS  every row User A can see is their own
+  PASS  SELECT by exact id returns nothing
+  PASS  UPDATE affects zero rows
+  PASS  UPDATE cannot reassign ownership (WITH CHECK)
+  PASS  DELETE affects zero rows
+
+2. User A attacks through the backend API (https://networkingtracker.vercel.app):
+  PASS  GET /contacts excludes User B's rows
+  PASS  GET by id returns 404
+  PASS  PATCH returns 404
+  PASS  DELETE returns 404
+
+3. User B re-reads their contact:
+  PASS  the contact still exists
+  PASS  its name was not modified
+  PASS  it is still owned by User B
+
+==========================================================
+15 passed, 0 failed
+
+User A cannot read, modify, or delete User B's contacts.
+```
+
+Section 1 is the meaningful one: User A holds a valid token and the public Data API URL, bypasses the
+backend completely, and still gets nothing. That is RLS doing the work, not application code.
+
+### Sign-in and sign-out
+
+See [screenshot 01](docs/screenshots/01-sign-in.png) (signed out) and
+[screenshot 02](docs/screenshots/02-contact-list.png) (signed in, with the Sign out control in the
+header).
+
+### Create, edit, delete, and refresh
+
+Screenshots [03](docs/screenshots/03-add-contact.png), [04](docs/screenshots/04-created.png),
+[08](docs/screenshots/08-edit-contact.png), [09](docs/screenshots/09-delete-confirm.png), and
+[10](docs/screenshots/10-after-refresh.png).
+
+### Invalid input failing safely
+
+[Screenshot 05](docs/screenshots/05-invalid-input.png) — an empty name rejected by the backend with an
+inline message and no row written.
+
+### No committed secrets
+
+`.gitignore` excludes every `.env` variant except `.env.example`. Verified across the full history:
+
+```
+$ git ls-files | grep -E '\.env'
+.env.example
+
+$ git log -p --all | grep -cE 'postgres(ql)?://[a-z_]+:[^@]{8,}@'   # real connection strings
+0
+$ git log -p --all | grep -c 'npg_'                                  # Neon password prefix
+0
+$ git log -p --all | grep -cE 'eyJ[A-Za-z0-9_-]{10,}\.eyJ'           # JWTs
+0
+```
 
 ## Deployment
 
-_Added after deployment._
+Deployed to Vercel as a single project containing two services.
+
+```bash
+vercel link --yes --project networkingtracker
+
+# Public URLs — these reach the browser, so Vercel requires them to be
+# declared explicitly as config rather than secrets.
+vercel env add VITE_NEON_AUTH_URL     production --type config
+vercel env add VITE_NEON_DATA_API_URL production --type config
+
+# Server-only.
+vercel env add NEON_AUTH_URL     production
+vercel env add NEON_DATA_API_URL production
+
+vercel deploy --prod
+```
+
+`DATABASE_URL` is intentionally **not** added — the deployed app never connects to Postgres directly.
+
+Finally, the deployed domain must be a trusted origin for Neon Auth or sign-in will fail there:
+
+```bash
+npx neon@latest neon-auth domain add https://networkingtracker.vercel.app \
+  --project-id <project-id>
+```
+
+`vercel.json` declares the two services and the routing between them:
+
+```json
+{
+  "services": {
+    "frontend": { "root": "frontend/", "framework": "vite",
+                  "buildCommand": "npm run build", "outputDirectory": "dist" },
+    "backend":  { "root": "backend/", "framework": "express",
+                  "buildCommand": "npm run build", "entrypoint": "dist/index.js" }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "backend" } },
+    { "source": "/(.*)",     "destination": { "service": "frontend" } }
+  ]
+}
+```
+
+Services receive the original request path, so `/api/contacts` arrives at Express unchanged.
 
 ## Known limitations and what I'd do next
 
-- `@neondatabase/neon-js` is published only as a beta (`0.7.0-beta`); its API may change.
-- The frontend bundle is ~636 kB uncompressed (~178 kB gzipped), most of it the auth SDK. Route-level
-  code splitting would trim it.
-- Sorting and filtering happen in the browser over the full contact list. Correct and instant at
-  personal-address-book scale, but a user with thousands of contacts would want server-side paging.
-- No automated end-to-end browser test; the CRUD flows were verified by hand and by the RLS script.
-- Sessions rely on the auth SDK's own storage, so there is no "remember this device" control.
-- Deleting is permanent — no soft delete or undo.
+- **`@neondatabase/neon-js` is a beta** (`0.7.0-beta`), the only published version. Its API may change.
+- **Bundle size.** The frontend is ~640 kB uncompressed (~178 kB gzipped), most of it the auth SDK.
+  Route-level code splitting would trim it; there is only one route today, so it was not worth doing.
+- **Client-side sort and filter.** Both run in the browser over the full contact list. Correct and
+  instant at personal-address-book scale, but thousands of contacts would need server-side paging.
+- **No end-to-end browser test.** CRUD flows were verified manually and through the screenshot
+  automation, but there is no committed Playwright suite. That is the first thing I would add.
+- **The backend makes one Data API round trip per request.** Fine at this scale; a busier app would
+  want connection reuse or caching of the JWKS response beyond the SDK's default.
+- **Deleting is permanent** — no soft delete or undo.
+- **Session lifetime is whatever the auth SDK defaults to.** There is no "remember this device"
+  control, and an expired token surfaces as a sign-in prompt.
