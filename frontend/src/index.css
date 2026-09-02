@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Tailwind v4 reads these from @theme, so utilities like
+ * bg-surface and text-muted are generated from the same source of truth the
+ * components use. Light and dark are both defined; the app follows the OS.
+ */
+@theme {
+  --color-canvas: oklch(98.5% 0.002 265);
+  --color-surface: oklch(100% 0 0);
+  --color-border: oklch(92% 0.004 265);
+  --color-ink: oklch(21% 0.012 265);
+  --color-muted: oklch(52% 0.014 265);
+  --color-brand: oklch(52% 0.19 265);
+  --color-brand-ink: oklch(99% 0 0);
+  --color-danger: oklch(55% 0.21 25);
+  --color-success: oklch(58% 0.14 155);
+
+  --color-priority-high: oklch(55% 0.20 25);
+  --color-priority-medium: oklch(62% 0.15 75);
+  --color-priority-low: oklch(55% 0.09 230);
+
+  --radius-card: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-canvas: oklch(17% 0.012 265);
+    --color-surface: oklch(21% 0.014 265);
+    --color-border: oklch(30% 0.014 265);
+    --color-ink: oklch(96% 0.004 265);
+    --color-muted: oklch(70% 0.014 265);
+    --color-brand: oklch(70% 0.15 265);
+    --color-brand-ink: oklch(17% 0.012 265);
+    --color-danger: oklch(70% 0.17 25);
+    --color-success: oklch(72% 0.14 155);
+
+    --color-priority-high: oklch(72% 0.16 25);
+    --color-priority-medium: oklch(78% 0.13 75);
+    --color-priority-low: oklch(72% 0.09 230);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Visible focus for keyboard users on every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}

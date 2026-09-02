@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+.vercel/
+
+# secrets — every .env variant except the committed example
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.log
