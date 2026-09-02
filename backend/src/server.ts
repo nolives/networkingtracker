@@ -1,11 +1,11 @@
 /**
- * Local development entry point: a plain Express server.
+ * Local development entry point: a plain Express server on PORT.
  * Vercel uses index.ts instead, which exports the app rather than listening.
  */
-import { createApp } from './app.js';
+import app from './app.js';
 
 const port = Number(process.env.PORT ?? 3001);
 
-createApp().listen(port, () => {
+app.listen(port, () => {
   console.log(`API listening on http://localhost:${port}`);
 });

@@ -4,6 +4,10 @@ import { DataApiError } from './dataApi.js';
 import { loadEnv } from './env.js';
 import { contactsRouter, mapDataApiError } from './routes/contacts.js';
 
+/**
+ * Builds the Express app. Exported for tests and for the local server; the
+ * default export below is the single instance the app actually runs on.
+ */
 export function createApp() {
   // Populates process.env from .env.local in local development; a no-op on
   // Vercel, where the variables come from project settings.
@@ -75,3 +79,15 @@ export function createApp() {
 
   return app;
 }
+
+/**
+ * The app instance, constructed once at module load.
+ *
+ * Vercel's Express integration resolves the entrypoint by convention and picks
+ * this module, so it must default-export something it recognises as an app.
+ * Both `server.ts` (local) and `index.ts` (serverless) reuse this instance
+ * rather than building their own.
+ */
+const app = createApp();
+
+export default app;

@@ -1,11 +1,5 @@
 /**
- * Serverless entry point (Vercel).
- *
- * Vercel's Express integration expects the entrypoint to default-export the
- * app and manages listening itself. `server.ts` is the standalone counterpart
- * used locally, so the backend still runs as an ordinary Express server with
- * no Vercel involvement.
+ * Serverless entry point (Vercel): exports the app without listening.
+ * Vercel manages the server. `server.ts` is the standalone local counterpart.
  */
-import { createApp } from './app.js';
-
-export default createApp();
+export { default } from './app.js';
