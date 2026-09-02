@@ -23,8 +23,19 @@
   --radius-card: 0.75rem;
 }
 
+/*
+ * Dark overrides.
+ *
+ * These must be a plain `:root` block, NOT a nested `@theme`. Tailwind v4
+ * hoists `@theme` out of media queries, so an `@media { @theme { ... } }`
+ * silently drops the condition and the later values win unconditionally --
+ * which made the app permanently dark and left the light palette dead.
+ *
+ * Redefining the same custom properties here works because the utilities
+ * generated from `@theme` above resolve them at runtime via var().
+ */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  :root {
     --color-canvas: oklch(17% 0.012 265);
     --color-surface: oklch(21% 0.014 265);
     --color-border: oklch(30% 0.014 265);
