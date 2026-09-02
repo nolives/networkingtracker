@@ -1,14 +1,8 @@
 /**
- * Local development entry point. Vercel uses api/index.ts instead.
- *
- * Env vars are loaded before app.ts is imported, because auth.ts and
- * dataApi.ts validate their configuration at module load.
+ * Local development entry point: a plain Express server.
+ * Vercel uses index.ts instead, which exports the app rather than listening.
  */
-import { loadEnv } from './env.js';
-
-loadEnv();
-
-const { createApp } = await import('./app.js');
+import { createApp } from './app.js';
 
 const port = Number(process.env.PORT ?? 3001);
 

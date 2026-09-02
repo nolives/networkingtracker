@@ -1,9 +1,14 @@
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { DataApiError } from './dataApi.js';
+import { loadEnv } from './env.js';
 import { contactsRouter, mapDataApiError } from './routes/contacts.js';
 
 export function createApp() {
+  // Populates process.env from .env.local in local development; a no-op on
+  // Vercel, where the variables come from project settings.
+  loadEnv();
+
   const app = express();
 
   // Vercel terminates TLS upstream; trust it so req.ip and protocol are right.

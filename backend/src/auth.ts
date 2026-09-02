@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 /**
  * Verifies the caller's Neon Managed Better Auth JWT.
@@ -14,25 +14,36 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
  * ${NEON_AUTH_URL}/.well-known/jwks.json.
  */
 
-const authUrl = process.env.NEON_AUTH_URL;
-
-if (!authUrl) {
-  throw new Error(
-    'NEON_AUTH_URL is not set. The backend cannot verify tokens without it.'
-  );
+interface AuthConfig {
+  jwks: JWTVerifyGetKey;
+  issuers: string[];
 }
 
-const normalised = authUrl.replace(/\/+$/, '');
+let cached: AuthConfig | null = null;
 
 /**
- * Neon's docs and their Hono guide disagree on whether `iss` is the auth URL's
- * origin or its full path, so both are accepted. The issuer stays pinned to a
- * known set -- this is not `issuer: undefined`.
+ * Resolved on first request rather than at import time. A module-level throw
+ * would take down the whole serverless function before Express could return
+ * anything, turning a configuration mistake into an unexplained 500.
  */
-const acceptedIssuers = [new URL(normalised).origin, normalised];
+function getAuthConfig(): AuthConfig {
+  if (cached) return cached;
 
-// Module scope: the key set is fetched once and cached across warm invocations.
-const jwks = createRemoteJWKSet(new URL(`${normalised}/.well-known/jwks.json`));
+  const authUrl = process.env.NEON_AUTH_URL;
+  if (!authUrl) throw new Error('NEON_AUTH_URL is not set.');
+
+  const normalised = authUrl.replace(/\/+$/, '');
+
+  cached = {
+    jwks: createRemoteJWKSet(new URL(`${normalised}/.well-known/jwks.json`)),
+    // Neon's docs and their Hono guide disagree on whether `iss` is the auth
+    // URL's origin or its full path, so both are accepted. The issuer stays
+    // pinned to a known set -- this is not `issuer: undefined`.
+    issuers: [new URL(normalised).origin, normalised],
+  };
+
+  return cached;
+}
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -63,9 +74,18 @@ export async function requireAuth(
 
   const token = header.slice('Bearer '.length).trim();
 
+  let config: AuthConfig;
   try {
-    const { payload } = await jwtVerify(token, jwks, {
-      issuer: acceptedIssuers,
+    config = getAuthConfig();
+  } catch (error) {
+    console.error('Auth configuration error:', error);
+    res.status(500).json({ error: 'The server is misconfigured.' });
+    return;
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, config.jwks, {
+      issuer: config.issuers,
     });
 
     if (!payload.sub) {

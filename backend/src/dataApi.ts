@@ -10,13 +10,15 @@
  * The backend holds no DATABASE_URL at runtime.
  */
 
-const dataApiUrl = process.env.NEON_DATA_API_URL;
-
-if (!dataApiUrl) {
-  throw new Error('NEON_DATA_API_URL is not set.');
+/**
+ * Resolved per call rather than at import time, so a missing variable surfaces
+ * as a handled error instead of crashing the function before Express loads.
+ */
+function baseUrl(): string {
+  const dataApiUrl = process.env.NEON_DATA_API_URL;
+  if (!dataApiUrl) throw new Error('NEON_DATA_API_URL is not set.');
+  return dataApiUrl.replace(/\/+$/, '');
 }
-
-const base = dataApiUrl.replace(/\/+$/, '');
 
 export class DataApiError extends Error {
   constructor(
@@ -57,7 +59,7 @@ async function request<T>({
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (representation) headers['Prefer'] = 'return=representation';
 
-  const response = await fetch(`${base}${path}`, {
+  const response = await fetch(`${baseUrl()}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
