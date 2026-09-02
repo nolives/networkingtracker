@@ -3,16 +3,19 @@ node_modules/
 
 # builds
 dist/
-.vercel/
+*.tsbuildinfo
 
-# secrets — every .env variant except the committed example
+# vercel
+.vercel
+
+# secrets — every .env variant EXCEPT the committed example.
+# The negation must come last: later rules win in .gitignore, so a trailing
+# `.env*` would otherwise re-ignore the example a grader needs.
 .env
 .env.*
+.env*
 !.env.example
 
 # misc
 .DS_Store
 *.log
-
-# build info
-*.tsbuildinfo
