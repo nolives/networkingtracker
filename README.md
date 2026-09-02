@@ -504,6 +504,48 @@ npx neon@latest neon-auth domain add https://networkingtracker.vercel.app \
 
 Services receive the original request path, so `/api/contacts` arrives at Express unchanged.
 
+## Development notes
+
+Bugs found by running the app end to end rather than by reading the code. Recorded here because
+the git history was squashed to remove personal data from earlier screenshots.
+
+1. **`.partial()` does not strip a Zod `.default()`.** `updateContactSchema` was derived from the
+   create schema, so an empty `PATCH {}` parsed to `{ priority: 'medium' }`, slipped past the
+   "no fields to update" guard, and silently reset the contact's priority. The update schema is now
+   built from the shared field definitions with no default, and a test pins the behaviour.
+
+2. **Vite loads `.env` files from its own root, not the repository root.** Every `VITE_*` variable
+   was undefined, and the auth SDK quietly fell back to a relative `/api/auth` path that 404'd
+   against our own origin — which looks like a broken backend, not missing configuration. Fixed with
+   `envDir`, plus a startup check that throws instead of degrading silently.
+
+3. **The session token is not the API token.** Managed Better Auth returns an opaque 32-character
+   session token; the Data API needs the signed JWT from `GET {AUTH_URL}/token`. Neon's own backend
+   guide reads `session.token`, which would forward the wrong value. The client now verifies that
+   what it holds is actually a three-segment JWT before sending it.
+
+4. **Sorting was unreachable on mobile.** The sort controls lived only in the desktop table header,
+   which is hidden below `md`. Added a sort select for small screens.
+
+5. **The light theme never applied.** Tailwind v4 hoists `@theme` out of media queries, so
+   `@media (prefers-color-scheme: dark) { @theme { … } }` silently dropped the condition and the dark
+   values won unconditionally. Dark overrides now redefine the custom properties in a plain `:root`
+   block.
+
+6. **Sign-out left the user looking signed in.** The session cleared server-side but the SDK's
+   `useSession` hook did not invalidate, so the app kept rendering the contact list against a dead
+   session. Sign-out now awaits the call and then navigates, which also drops the fetched contacts
+   from memory.
+
+7. **Deploying to Vercel took three attempts.** Compiled ESM was parsed as CommonJS until the build
+   emitted a `{"type":"module"}` marker beside its output, and Vercel's Express integration resolves
+   the entrypoint by filename convention — it kept selecting `dist/app.js` and rejecting it for
+   having no default export.
+
+Also worth noting: PostgREST answers a write that matched zero rows with a bare `204`, which is
+indistinguishable from success. The two-account test would have reported that User A successfully
+deleted User B's contact had it asserted on status codes alone.
+
 ## Known limitations and what I'd do next
 
 - **`@neondatabase/neon-js` is a beta** (`0.7.0-beta`), the only published version. Its API may change.
