@@ -381,11 +381,11 @@ See [Testing](#testing) above — 19/19 passing, no credentials required.
 Two-account RLS privacy test
 ==========================================================
 
-User A: nrolives+usera@gmail.com  (sub 9f4e5297-fc51-436e-8eac-fb83817e674a)
-User B: nrolives+userb@gmail.com  (sub 74d6ac77-d0dc-4b86-addc-e27e12f6ad66)
+User A: usera@example.com  (sub 601c0e1b-9019-4449-9dab-69d20dab16b5)
+User B: userb@example.com  (sub dd31b3ed-0a5d-4f8a-ae20-b0eb2f2ed147)
   PASS  the two accounts are distinct
 
-User B created contact 476dde3c-022e-4107-8eee-b00ecef71e80
+User B created contact 83acb05c-f894-4058-b49e-defba68dedb1
   PASS  the row is owned by User B via auth.user_id()
 
 1. User A attacks the public Data API directly (no backend):
