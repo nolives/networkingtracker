@@ -439,15 +439,23 @@ inline message and no row written.
 
 ```
 $ git ls-files | grep -E '\.env'
-.env.example
+.env.example                          # the only .env file tracked, placeholders only
 
-$ git log -p --all | grep -cE 'postgres(ql)?://[a-z_]+:[^@]{8,}@'   # real connection strings
+# Connection strings carrying real credentials.
+# `grep -v user:password` excludes the placeholder in .env.example, which is
+# the one connection string that is supposed to be committed:
+$ git log -p --all | grep -E 'postgres(ql)?://[a-z_]+:[^@]{8,}@' | grep -vc 'user:password'
 0
-$ git log -p --all | grep -c 'npg_'                                  # Neon password prefix
+# Neon role passwords (the prefix followed by an actual secret):
+$ git log -p --all | grep -cE 'npg_[A-Za-z0-9]{12,}'
 0
-$ git log -p --all | grep -cE 'eyJ[A-Za-z0-9_-]{10,}\.eyJ'           # JWTs
+# JWTs:
+$ git log -p --all | grep -cE 'eyJ[A-Za-z0-9_-]{10,}\.eyJ'
 0
 ```
+
+The patterns are written to match a *credential* rather than a bare prefix, so this section does not
+match itself and the counts stay honest when you re-run them.
 
 ## Deployment
 
